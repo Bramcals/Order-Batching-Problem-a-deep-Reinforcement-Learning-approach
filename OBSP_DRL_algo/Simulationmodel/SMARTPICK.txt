@@ -1,0 +1,836 @@
+//Created on Thu Sep  5 15:55:08 2019
+//@author: Bram Cals
+
+
+begin pInit arriving procedure
+	//Initialize variables
+	create 1 load type ltControl to pInitializeModel
+
+	
+	set viINP_Operators to 3
+	set viINP_Shuttles to 10
+	set viINP_PtGPipeline to viINP_Operators
+	set viADAPTOpipeline to viINP_Shuttles
+	set viPackingPipeline to 50
+	set viDtOPipeline to 50
+	set viStOPipeline to 75
+	set viShippingPipeline to 0
+	set viDeliverTSU to 60 
+	set viNSending_Messages to 0
+	set viNReceiving_Messages to 0
+	
+	set viOrdersProcessed_snaps to 0
+	set vi_late_order_per_snap to 0
+	
+	set viNDtOStations to 1
+	set viNStOStations to 1
+	set viNPackingStations to 1
+	set viPackingTime to 5/ viNPackingStations /* time needed for packing [s/item] */
+	set viDtOTime to 5/viNDtOStations	/* time needed for DtO [s/item] */
+	set viStOTime to 7/viNStOStations /* time needed for StO [s/item] */
+	set vi_average_number_items_TSU = 5
+	set viDtOqueue to (viDeliverTSU/viDtOTime) * 1.5
+	set viStOqueue to (viDeliverTSU/viStOTime ) * 1.5
+	set viTimeTemp to 0
+	set viNBuffer_MIO_orders_Adapto to 10
+
+	set viHighestIndex to 0
+	
+	
+end
+
+/***********************************************************************************************************/
+begin pStartModel arriving procedure
+/***********************************************************************************************************/
+	clone 1 load to pTest
+end
+
+/***********************************************************************************************************/
+begin pTest arriving procedure
+/***********************************************************************************************************/
+	//For each message a different action
+	//Read message, set input variables and let the model simulate until state variables change
+	set vistart to 1
+	while (1=1) do
+	begin
+
+		set vsTempstring to "_"
+		set vsTemp(1) to vsTempstring
+		set vsTemp(2) to vsTempstring
+		set vsTemp(3) to vsTempstring
+		set vsTemp(4) to vsTempstring
+		set vsTemp(5) to vsTempstring
+		set vsTemp(6) to vsTempstring
+		set vsTemp(7) to vsTempstring
+		set vsTemp(8) to vsTempstring
+		set vsTemp(9) to vsTempstring
+		
+		call fReceive()	
+		
+		
+		inc vi_Nreceivings by 1
+		if vi_Nreceivings % 1000000 = 0 then
+		begin
+			print "_Dummy_" to sSendIoMsg
+			
+			call AcmSend( viIoConnection1, sSendIoMsg, 1 )
+			
+			print "_Dummy_" to message
+		end
+		
+		if (sTimerMsg != null) then
+		begin	
+			set vi_Nreceivings to 0
+			read vsTemp from sTimerMsg with delimiter "_" 
+			
+			if vsTemp(1) = "start" then
+			begin 
+				set vistartTime_smartpick to vsTemp(2) 
+				set viEndTime_smartpick to vsTemp(3)
+				print vistartTime_smartpick
+				create 1 load of type ltDummy to pADAPTOcontroller
+				create 1 load of type ltDummy to pPtGOperatorController
+				print "_Update_" viINP_PtGPipeline "_" viADAPTOpipeline "_"viDtOPipeline "_"viStOPipeline "_" viPackingPipeline "_"   aiTime "_" ac "_"  to sSendIoMsg
+				call AcmSend( viIoConnection1, sSendIoMsg, 1 )
+				inc viNSending_Messages by 1
+
+			end
+			
+			if vsTemp(1) = "beginning" then
+			begin 
+				while vsTemp(1) = "beginning" and (viINP_PtGPipeline + viADAPTOpipeline) > 0 do	
+				begin
+					set aiOrdertime to vsTemp(2)
+					set aiBatchID to vsTemp(3)
+					set aiNResources to vsTemp(4)
+					set aiNTSUs to vsTemp(5)
+					set aiRouteID to vsTemp(6)
+					set aiTimeforPtG to vsTemp(7)
+					set aiNItems to vsTemp(8)
+					set aiNOrders to vsTemp(9)
+					
+					clone 1 load to pOrderManager
+					wait for 0.01 sec	
+					set aiTime to ac
+					dec aiTime by 0.2
+					dec aiTime by viTimeTemp
+					set viINP_PtGPipeline to viINP_Operators - (qWaitForPtGResource size)
+					if viINP_PtGPipeline < 0
+					begin
+						set viINP_PtGPipeline to 0
+					end
+					print "_Update_" viINP_PtGPipeline "_" viADAPTOpipeline "_"viDtOPipeline "_"viStOPipeline "_" viPackingPipeline "_"   aiTime "_" ac "_"  to sSendIoMsg
+					
+					call AcmSend( viIoConnection1, sSendIoMsg, 1 )
+					inc viNSending_Messages by 1
+					//print "Sending message: "  sSendIoMsg "N Send: " viNSending_Messages to message
+					call fReceiveInit()
+					read vsTemp from sTimerMsg with delimiter "_" 
+				end
+			end
+			
+			if vsTemp(1) = "action" then
+			begin 
+							
+				set aiOrdertime to vsTemp(2)
+				set aiBatchID to vsTemp(3)
+				set aiNResources to vsTemp(4)
+				set aiNTSUs to vsTemp(5)
+				set aiRouteID to vsTemp(6)
+				set aiTimeforPtG to vsTemp(7)
+				set aiNItems to vsTemp(8)
+				set aiNOrders to vsTemp(9)
+			
+				clone 1 load to pOrderManager
+				wait for 10 sec
+				set aiTime to ac
+				dec aiTime by 0.2
+				dec aiTime by viTimeTemp
+
+				set viINP_PtGPipeline to viINP_Operators - (qWaitForPtGResource size)
+
+				set vireward to 0
+				set viTempbatchID_wip to 1 
+								
+				while viTempbatchID_wip <= viHighestIndex do
+				begin
+					if viallloadsWIP(viTempbatchID_wip) <> null then
+					begin
+						
+						if viallloadsWIP(viTempbatchID_wip) aiRouteID = 1 or viallloadsWIP(viTempbatchID_wip) aiRouteID = 2 then
+						begin						
+							set virewardroute12 to (((ac -  (viallloadsWIP(viTempbatchID_wip) atStartTime )) /  (viallloadsWIP(viTempbatchID_wip) atTotalProcessingTime)) *  (viallloadsWIP(viTempbatchID_wip)  aiNOrders))
+							inc vireward by virewardroute12
+							// print "virewardroute12: " virewardroute12 to message
+						end						
+						
+						else if viallloadsWIP(viTempbatchID_wip) aiRouteID = 3 or viallloadsWIP(viTempbatchID_wip) aiRouteID = 4 or viallloadsWIP(viTempbatchID_wip) aiRouteID = 5 or viallloadsWIP(viTempbatchID_wip) aiRouteID = 6
+						begin						
+							if viallloadsWIP(viTempbatchID_wip) aiShuttleWaitingTime_start > 0 and viallloadsWIP(viTempbatchID_wip) aiShuttleWaitingTime < 0 then
+							begin 
+								set virewardroute3456 to (((ac - viallloadsWIP(viTempbatchID_wip) atStartTime - (ac - viallloadsWIP(viTempbatchID_wip) aiShuttleWaitingTime_start))  / viallloadsWIP(viTempbatchID_wip) atTotalProcessingTime) * viallloadsWIP(viTempbatchID_wip) aiNOrders)
+							end							
+							else if viallloadsWIP(viTempbatchID_wip) aiShuttleWaitingTime > 0 then
+							begin 
+								set virewardroute3456 to (((ac - viallloadsWIP(viTempbatchID_wip) atStartTime - viallloadsWIP(viTempbatchID_wip) aiShuttleWaitingTime)  / viallloadsWIP(viTempbatchID_wip) atTotalProcessingTime) * viallloadsWIP(viTempbatchID_wip) aiNOrders)
+							end			
+							else
+							begin
+								set virewardroute3456 to (((ac - viallloadsWIP(viTempbatchID_wip) atStartTime)  / viallloadsWIP(viTempbatchID_wip) atTotalProcessingTime) * viallloadsWIP(viTempbatchID_wip) aiNOrders)
+							end
+							inc vireward by virewardroute3456
+
+						end
+						else
+							print "something went wrong with calculating the rewards"  to message
+					end	
+					
+					inc viTempbatchID_wip by 1 	
+
+					
+				end				
+	
+				print "_Update_" viINP_PtGPipeline "_" viADAPTOpipeline "_"viDtOPipeline "_"viStOPipeline "_" viPackingPipeline "_"   aiTime "_" vireward "_" to sSendIoMsg
+
+				call AcmSend( viIoConnection1, sSendIoMsg, 1 )
+				inc viNSending_Messages by 1
+
+				
+			end
+			
+			if vsTemp(1) = "wait" or vsTemp(1) = "hold" then
+			begin 
+				if vsTemp(1) = "wait"
+					wait for 10 sec
+				if vsTemp(1) = "hold"
+					wait for 0.01 sec	
+				set aiTime to ac
+				dec aiTime by 0.2
+				dec aiTime by viTimeTemp
+				set viINP_PtGPipeline to viINP_Operators - (qWaitForPtGResource size)
+				if viINP_PtGPipeline < 0
+				begin
+					set viINP_PtGPipeline to 0
+				end
+				
+				set vireward to 0
+				set viTempbatchID_wip to 1 
+				
+				
+				while viTempbatchID_wip <= viHighestIndex do
+				begin
+					if viallloadsWIP(viTempbatchID_wip) <> null then
+					begin
+						
+						if viallloadsWIP(viTempbatchID_wip) aiRouteID = 1 or viallloadsWIP(viTempbatchID_wip) aiRouteID = 2 then
+						begin						
+							set virewardroute12 to (((ac -  (viallloadsWIP(viTempbatchID_wip) atStartTime )) /  (viallloadsWIP(viTempbatchID_wip) atTotalProcessingTime)) *  (viallloadsWIP(viTempbatchID_wip)  aiNOrders))
+							inc vireward by virewardroute12
+						end						
+						
+						else if viallloadsWIP(viTempbatchID_wip) aiRouteID = 3 or viallloadsWIP(viTempbatchID_wip) aiRouteID = 4 or viallloadsWIP(viTempbatchID_wip) aiRouteID = 5 or viallloadsWIP(viTempbatchID_wip) aiRouteID = 6
+						begin						
+							if viallloadsWIP(viTempbatchID_wip) aiShuttleWaitingTime_start > 0 and viallloadsWIP(viTempbatchID_wip) aiShuttleWaitingTime < 0 then
+							begin 
+								set virewardroute3456 to (((ac - viallloadsWIP(viTempbatchID_wip) atStartTime - (ac - viallloadsWIP(viTempbatchID_wip) aiShuttleWaitingTime_start))  / viallloadsWIP(viTempbatchID_wip) atTotalProcessingTime) * viallloadsWIP(viTempbatchID_wip) aiNOrders)
+							end
+							
+							else if viallloadsWIP(viTempbatchID_wip) aiShuttleWaitingTime > 0 then
+							begin 
+								set virewardroute3456 to (((ac - viallloadsWIP(viTempbatchID_wip) atStartTime - viallloadsWIP(viTempbatchID_wip) aiShuttleWaitingTime)  / viallloadsWIP(viTempbatchID_wip) atTotalProcessingTime) * viallloadsWIP(viTempbatchID_wip) aiNOrders)
+							end
+									
+							else
+							begin
+								set virewardroute3456 to (((ac - viallloadsWIP(viTempbatchID_wip) atStartTime)  / viallloadsWIP(viTempbatchID_wip) atTotalProcessingTime) * viallloadsWIP(viTempbatchID_wip) aiNOrders)
+							end
+							inc vireward by virewardroute3456
+
+						end
+						else
+							print "something went wrong with calculating the rewards"  to message
+					end	
+					
+					inc viTempbatchID_wip by 1 	
+					
+				end
+				
+				
+				print "_Update_" viINP_PtGPipeline "_" viADAPTOpipeline "_" viDtOPipeline "_"viStOPipeline "_" viPackingPipeline "_" aiTime "_"  vireward "_" to sSendIoMsg
+
+				call AcmSend( viIoConnection1, sSendIoMsg, 1 )
+				inc viNSending_Messages by 1
+			end				
+			
+			if vsTemp(1) = "end" then
+			begin
+				set viTempBatchesAdapto to 5
+				while qDtO size > 0  or qStO size > 0  or qPacking size > 0  or qWaitForPtGResource size  > 0  or qWaitForShuttle size  > 0 do
+				begin
+					 
+					
+					wait for 20 sec
+				end
+				print "_Automod_has_simulated_all_orders" viINP_PtGPipeline "_" viADAPTOpipeline "_" viDtOPipeline "_"viStOPipeline "_" viPackingPipeline "_" to sSendIoMsg
+				call AcmSend( viIoConnection1, sSendIoMsg, 1 )
+				inc viNSending_Messages by 1
+
+				
+				set viTimeTemp to ac
+				set viTempBatchesAdapto to 0
+				set viTSUbatchInADAPTO to 0
+			end
+			
+			if vsTemp(1) = "Final" then
+			begin
+				wait for 999999 sec
+				set viIoConnection1 to -1
+			end
+		end
+	end
+
+end
+
+begin pInitializeModel arriving procedure
+
+	print "Starting init" to message
+
+	print "INIT: Connecting client/server port 1234" to message
+	set viIoConnection1 to AcmConnectSocket("127.0.0.1", 1235)  //"127.0.0.1"
+	if ( viIoConnection1 = -1 ) then
+	  print "INIT: Can not connect IO connection to port 1234. Make sure a server port is listening" to message
+
+	print "to_simulate_type_start"    to sSendIoMsg
+	call AcmSend( viIoConnection1, sSendIoMsg, 1 )
+	inc viNSending_Messages by 1
+	//print "Sending message: "  sSendIoMsg "N Send: " viNSending_Messages to message
+	call fReceiveInit()
+
+
+end
+
+
+/* releases orders at the right time to the right process, and adds the attributes to the load */	
+begin pOrderManager arriving procedure
+	//Create loads of work for each incomming meesage 
+	if aiRouteID = 1 or aiRouteID = 2		/* calculate total number of loads */
+		set aiTotalLoads to aiNResources
+	if aiRouteID = 3 or aiRouteID = 4
+		set aiTotalLoads to aiNTSUs
+	if aiRouteID = 5 or aiRouteID = 6
+		set aiTotalLoads to aiNTSUs
+	
+
+
+	/* also possible to have items in PtG and ADAPTO. Then go to PtG first*/
+	
+	/* update loads in pipeline */
+	if aiRouteID = 1
+	begin
+		
+		set atTotalProcessingTime to aiTimeforPtG
+		dec viINP_PtGPipeline by aiNResources
+		// print "atTotalProcessingTime1: " atTotalProcessingTime to message	
+	end
+	else if aiRouteID = 2
+	begin
+		//dec viINP_PtGPipeline by aiNResources
+		dec viPackingPipeline by aiNTSUs
+		set atTotalProcessingTime to aiTimeforPtG
+		inc atTotalProcessingTime by (aiNItems * viPackingTime * viNPackingStations) 
+		// print "atTotalProcessingTime2: " atTotalProcessingTime to message	
+	end
+	else if aiRouteID = 3
+	begin
+		//dec viINP_PtGPipeline by aiNResources
+		//dec viADAPTOpipeline by aiNTSUs
+		dec viDtOPipeline by aiNTSUs
+		set atTotalProcessingTime to aiTimeforPtG
+		inc atTotalProcessingTime by 120 + viDeliverTSU + (viDtOTime * viNDtOStations)
+		// print "atTotalProcessingTime3: " atTotalProcessingTime to message	
+	end
+	else if aiRouteID = 4
+	begin
+		
+		//dec viINP_PtGPipeline by aiNResources
+		//dec viADAPTOpipeline by aiNTSUs
+		dec viStOPipeline by aiNTSUs
+		set atTotalProcessingTime to aiTimeforPtG
+		inc atTotalProcessingTime by 120  + viDeliverTSU + (aiNItems * viStOTime * viNStOStations) + 60 + (60 * aiNOrders)
+		// print "atTotalProcessingTime4: " atTotalProcessingTime to message	
+	end
+	else if aiRouteID = 5
+	begin
+		//dec viADAPTOpipeline by aiNTSUs
+		dec viDtOPipeline by aiNTSUs
+		set atTotalProcessingTime to viDeliverTSU 
+		inc atTotalProcessingTime by (viDtOTime * viNDtOStations)
+		// print "atTotalProcessingTime5: " atTotalProcessingTime to message	
+	end
+	else if aiRouteID = 6
+	begin
+		//dec viADAPTOpipeline by aiNTSUs
+		dec viStOPipeline by aiNTSUs
+		set atTotalProcessingTime to viDeliverTSU
+		inc atTotalProcessingTime by (aiNItems * viStOTime * viNStOStations) + 60 + (60 * aiNOrders)
+		// print "atTotalProcessingTime6 : " atTotalProcessingTime to message	
+	end
+			
+	else
+		print "warning, wrong route ai " to message
+	// print "atTotalProcessingTimeend : " atTotalProcessingTime to message
+	
+
+	
+	
+		/*check where loads start from*/
+	if fGetNextProcessPtr(this load current process, aiRouteID) = pPtG  /*start in PtG*/
+		clone aiNResources loads to pPtG new load type ltOrderBatch
+	else if fGetNextProcessPtr(this load current process, aiRouteID) = pADAPTO  /* start in ADAPTO */
+		clone aiNTSUs loads to pADAPTO new load type ltTSU
+	else
+		print "something wrong with load" to message
+		// send to die
+end
+
+/* operator finds items in WH with predefined waiting time, then sends load to either ADAPTO, packing or shipping */
+begin pPtG arriving procedure
+	
+	/* Start the clock for the batch throughput time */
+		set viIndex to 1
+	
+	while viallloadsWIP(viIndex) <> null do
+		inc viIndex by 1
+	set aiIndex to viIndex
+	if viIndex > viHighestIndex
+		set viHighestIndex to viIndex		
+	
+	set viallloadsWIP(aiIndex) to this load	
+	
+	set atStartTime to ac
+	// print "total time before picking"   atTotalProcessingTime to message
+	move into qWaitForPtGResource
+	set viINP_PtGPipeline to viINP_Operators - (qWaitForPtGResource size)
+	/* Activate the controller so it starts checking for an available operator */
+	order 1 load from olPtGController to continue
+	/* Wait to be assigned an available operator */
+	wait to be ordered on olNeedPtG
+	
+	/* Use the operator, and free it again afterwards */
+	get rPtGoperator(aiPtGOperator)
+	set viloadproccessingPtG(aiPtGOperator) to this load
+	set aiProcessing to 1
+	set atstartimeptg to ac
+	
+	wait for normal aiTimeforPtG, (0.1*aiTimeforPtG)  seconds
+	free rPtGoperator(aiPtGOperator)
+	set viloadproccessingPtG(aiPtGOperator) = null
+	set aiProcessing to 0
+	set viINP_PtGPipeline to viINP_Operators - (qWaitForPtGResource size)
+	set viPtGOperatorInUse(aiPtGOperator) to 0
+	
+	
+	/* send load to the next process */
+	if fGetNextProcessPtr(this load current process, aiRouteID) = pADAPTO /* to ADAPTO*/
+	begin
+		wait for 120 seconds
+		clone aiNTSUs loads to pADAPTO new load type ltTSU
+		// send to die
+	end
+	if fGetNextProcessPtr(this load current process, aiRouteID) = pPacking /* to packing*/
+	begin
+		send to pPacking
+	end
+	if fGetNextProcessPtr(this load current process, aiRouteID) = pShipping /* to shipping*/
+	begin
+		set load type to ltShippingCarton
+		send to pShipping
+	end
+end
+
+
+begin pPtGOperatorController arriving procedure
+	
+	while 1=1 do 
+	begin 
+		if olNeedPtG size = 0 then
+			
+			wait to be ordered on olPtGController
+			
+		else 
+		begin
+			set aiPtGOperator to 0
+			while aiPtGOperator = 0 do 
+			begin 
+				set aiPtGOperator to fGetPtGOperator()
+				if aiPtGOperator = 0 then 
+					wait for 1 sec
+
+			end
+			
+			set olNeedPtG load list first aiPtGOperator to aiPtGOperator
+			order 1 load from olNeedPtG	
+		end
+	end
+
+end
+
+
+/* puts loads in a queue, requests shuttles from the ADAPTO controller, then sents to next process (DtO or StO) */
+begin pADAPTO arriving procedure
+		/* start the timer if ADAPTO is the first process the load goes to */
+	//onderstaande? 
+
+	set viIndex to 1
+	if aiIndex = 0 then
+	begin
+		while viallloadsWIP(viIndex) <> null do
+			inc viIndex by 1
+		set aiIndex to viIndex
+		if viIndex > viHighestIndex
+			set viHighestIndex to viIndex		
+		set viallloadsWIP(aiIndex) to this load	
+	end
+	move into qWaitForShuttle
+
+	
+	
+		
+	/* track time spend in q */
+
+	set aiShuttleWaitingTime_start to ac
+	
+	set aiTime to ac
+	dec aiTime by 0.2
+	dec aiTime by viTimeTemp
+	
+	/* count how many subbatch have arrived in adapto */
+
+	if aiRouteID = 4 or aiRouteID = 6  then
+	begin
+		if viTempBatchID <> aiBatchID then
+		begin
+			inc viTSUbatchInADAPTO by aiNOrders
+			set viTempBatchID to aiBatchID
+			
+			//print "counter" viTSUbatchInADAPTO to message
+			//print "Norders: " aiNOrders to message
+			//print "BatchId: " aiBatchID to message
+			if viTSUbatchInADAPTO > viNBuffer_MIO_orders_Adapto or aiTime > (viEndTime_smartpick - (15* 60)) then 
+			begin
+				inc viTempBatchesAdapto by 1
+				//print "number of big batches in Adapto: " viTempBatchesAdapto to message
+				set viTSUbatchInADAPTO to 0
+			end
+		end
+	end
+
+	
+	/* request a shuttle from the controller */
+	order 1 load from olADAPTOController to continue
+	/* Wait to be assigned an available operator */
+	wait to be ordered on olADAPTO
+	
+	if this load atStartTime = 0
+		set atStartTime to ac
+	
+	dec viADAPTOpipeline by 1
+	/* Retrieve TSU */
+	set aiShuttleWaitingTime to ac - aiShuttleWaitingTime_start
+		
+	get rADAPTO(aiADAPTOShuttle)
+	set loadproccessingadapto(aiADAPTOShuttle) = this load
+	set aiProcessing to 1
+	set atstarttimeadapto to ac	
+	wait for normal viDeliverTSU, 6 seconds /* time needed for ADAPTO  to move to next process */
+	free rADAPTO(aiADAPTOShuttle)
+	set loadproccessingadapto(aiADAPTOShuttle) = null
+	set aiProcessing to 0
+	inc viADAPTOpipeline by 1
+	set viShuttleInUse(aiADAPTOShuttle) to 0
+
+	if fGetNextProcessPtr(this load current process, aiRouteID) = pDtO /*  go to direct to order */
+	begin
+		send to pDtO
+	end
+	
+	if fGetNextProcessPtr(this load current process, aiRouteID) = pStO /* go to sort to order */
+	begin
+		send to pStO
+	end
+end
+
+/* check if there is a shuttle available and that there is space in the next process. If yes then releases the load from the order list */
+begin pADAPTOcontroller arriving procedure
+	
+	while 1=1
+	begin 
+		if olADAPTO load list size = 0 then
+			wait to be ordered on olADAPTOController
+		
+		/* check if adapto shuttle is available */
+
+		
+			
+		set aiADAPTOShuttle to 0
+		while aiADAPTOShuttle = 0 do 
+			begin 
+			set aiADAPTOShuttle to fGetADAPTOShuttle()
+			if aiADAPTOShuttle = 0 then 
+				wait for 1 sec
+			end
+			
+		
+		set viFoundSomething to false /* keeps track of something is found or not, if not: wait a bit */
+		for each vldptrLoadWaiting in olADAPTO absolute load list do
+		begin 	/* to direct to order */
+			if fGetNextProcessPtr(vldptrLoadWaiting current process, vldptrLoadWaiting aiRouteID) = pDtO and qDtO size < viDtOqueue  then
+			begin
+				set  vldptrLoadWaiting  aiADAPTOShuttle to aiADAPTOShuttle
+				order  vldptrLoadWaiting from olADAPTO  
+				//order vldptrLoadWaiting from olADAPTO to continue 
+				set viFoundSomething to true
+				break
+			end
+			
+			/* to sort to order*/
+			if fGetNextProcessPtr(vldptrLoadWaiting current process, vldptrLoadWaiting aiRouteID) = pStO and qStO size < viStOqueue then
+			begin
+				
+				
+				if viTempBatchesAdapto => 1 then
+				begin
+					set vldptrLoadWaiting aiADAPTOShuttle to aiADAPTOShuttle
+					
+					//order all loads satisfying aiRouteID = 6 or aiRouteID = 4 from olADAPTO to continue
+					
+					order vldptrLoadWaiting from olADAPTO
+					//print "ordering all loads" to message
+					set viFoundSomething to true
+					
+					if viTempBatchID_processed <> vldptrLoadWaiting aiBatchID
+					begin
+						inc viOrdersProcessedADAPTO by vldptrLoadWaiting aiNOrders
+						set viTempBatchID_processed to vldptrLoadWaiting aiBatchID
+						
+						// print "counter of processed orders" viOrdersProcessedADAPTO to message
+						// print "Norders processed for this load/TSU: " vldptrLoadWaiting aiNOrders to message
+						// print "NTSU: " vldptrLoadWaiting aiNTSUs to message
+						if viOrdersProcessedADAPTO > viNBuffer_MIO_orders_Adapto then 
+						begin
+							dec viTempBatchesAdapto by 1
+							set viOrdersProcessedADAPTO to 0
+							// print "Big batch is completed" to message
+						end
+					end
+					break
+				end
+			end
+			
+		end
+		
+		if viFoundSomething = false
+		begin
+			set viShuttleInUse(aiADAPTOShuttle) to 0
+			wait for 1 second
+		end
+		
+	end
+end
+
+begin pPacking arriving procedure
+	move into qPacking /* infinite queue */
+	get rPacking
+	wait for normal (aiNItems * viPackingTime), (aiNItems * viPackingTime * 0.2) seconds  /* packing time */
+	
+	free rPacking
+	inc viPackingPipeline by 1
+	send to pShipping
+end
+
+begin pDtO arriving procedure
+	move into qDtO
+	get rDtO
+	wait for normal viDtOTime, (viDtOTime * 0.1 ) seconds /* packing time */
+	inc viDtOPipeline by 1
+	free rDtO
+	
+	send to pShipping
+	
+end
+
+begin pStO arriving procedure
+	move into qStO
+	get rStO
+	
+	wait for normal ((aiNItems /aiNTSUs) * viStOTime), (((aiNItems /aiNTSUs) * viStOTime) *0.2) seconds/* sorting and packing time  */
+	
+	free rStO
+	inc viStOPipeline by 1
+	send to pShipping
+end
+
+begin pShipping arriving procedure
+	/* collect all items with same batchID. If all are in, the order is complete. */
+	move into qShipping
+	
+	set viCountTotalLoads to 1 /* count to number of loads that ends up in shipping */
+	
+	for each vldptr_Temp in olShipping absolute load list do
+		begin
+			if vldptr_Temp aiBatchID = this load aiBatchID
+			inc viCountTotalLoads by 1
+		end
+			
+	if this load aiTotalLoads = viCountTotalLoads /* last load of the order */
+		begin
+			for each vldptr_Temp in olShipping absolute load list do
+				if vldptr_Temp aiBatchID = this load aiBatchID
+				begin	
+					order vldptr_Temp from olShipping to continue
+				end
+			
+			
+			if this load aiRouteID = 4 or this load aiRouteID = 6 then
+			begin
+				set viTempTime to this load aiNItems				
+				set viTempTime1 to (viTempTime  * viStOTime * viNStOStations ) - (viTempTime  * viStOTime)	
+				wait for viTempTime1 seconds
+				wait for 60 + (aiNOrders * 60) seconds
+			
+			end
+			
+			set atEndTime to ac			
+			set atThroughputTime to atEndTime - atStartTime
+		
+			set viINP_PtGPipeline to viINP_Operators - (qWaitForPtGResource size)
+			if viINP_PtGPipeline < 0
+			begin
+				set viINP_PtGPipeline to 0
+			end
+			if viTempBatchID_shipped <> this load aiBatchID
+			begin
+				set viTempBatchID_shipped to this load aiBatchID
+				print "_BatchID_" aiBatchID "_" (atEndTime+vistartTime_smartpick-viTimeTemp) "_" aiOrdertime "_" aiNItems "_"  aiNOrders "_" atThroughputTime "_Update_" viINP_PtGPipeline "_" viADAPTOpipeline "_" viDtOPipeline "_"viStOPipeline "_" viPackingPipeline "_" ac "_" aiRouteID "_" to sSendIoMsg
+			
+				call AcmSend( viIoConnection1, sSendIoMsg, 1 )
+				inc viNSending_Messages by 1
+				//print "Sending message: "  sSendIoMsg "N Send: " viNSending_Messages to message
+			end 
+			
+			inc viShippingPipeline by 1
+	
+			// send to die
+		end
+	else 
+		wait to be ordered on olShipping
+	
+	set viallloadsWIP(aiIndex) to null
+	if aiIndex = viHighestIndex
+		dec viHighestIndex by 1
+	// send to die
+end
+
+/**********************************************************************************************/
+
+/************************************************************************************************/
+begin fReceiveInit function
+/************************************************************************************************/
+
+/* Messages that are send to Automod shall be enclosed between STX and ETX characters (HEX 02 and HEX 03) */
+
+	set sTimerMsg = null
+	//print "Waiting for message" to message
+
+	while (sTimerMsg = null) do
+	begin
+		if ( viIoConnection1 >= 0 ) then
+		begin
+			set sTimerMsg to AcmReceive(viIoConnection1)
+		end
+	end
+
+	inc viNReceiving_Messages by 1
+	// print "Incomming message: " sTimerMsg " N Received: " viNReceiving_Messages to message
+	return true
+end
+
+/************************************************************************************************/
+begin fSend function 
+/************************************************************************************************/
+	if ( viIoConnection1 > 0) then
+	begin 
+		print anArg to sSendIoMsg
+		call AcmSend( viIoConnection1, sSendIoMsg, 1 )
+	// print "Send Time: "ac" Message: "sSendIoMsg to message
+	end 
+	return true
+end
+
+/************************************************************************************************/
+begin fReceive function
+/************************************************************************************************/
+	set sTimerMsg = null
+	if ( viIoConnection1 >= 0 ) then
+	begin
+		set sTimerMsg to AcmReceive(viIoConnection1)
+
+	end
+	return true
+end
+
+
+
+/* returns the pointer for the next process that the load needs to go to, based on current process and routeID */
+begin fGetNextProcessPtr function
+	if vpptrCurrentProcess is pOrderManager and (ARGaiRouteID = 1 or ARGaiRouteID = 2 or ARGaiRouteID = 3 or ARGaiRouteID = 4)
+		set vpptrNextProcess to pPtG
+	else if vpptrCurrentProcess is pOrderManager and (ARGaiRouteID = 5 or ARGaiRouteID = 6)
+		set vpptrNextProcess to pADAPTO
+	else if vpptrCurrentProcess is pPtG and ARGaiRouteID = 1 
+		set vpptrNextProcess to pShipping
+	else if vpptrCurrentProcess is pPtG and ARGaiRouteID = 2 
+		set vpptrNextProcess to pPacking
+	else if vpptrCurrentProcess is pPtG and (ARGaiRouteID = 3 or ARGaiRouteID = 4)
+		set vpptrNextProcess to pADAPTO
+	else if vpptrCurrentProcess is pADAPTO and (ARGaiRouteID = 3 or ARGaiRouteID = 5)
+		set vpptrNextProcess to pDtO
+	else if vpptrCurrentProcess is pADAPTO and (ARGaiRouteID = 4 or ARGaiRouteID = 6)
+		set vpptrNextProcess to pStO
+			
+	return vpptrNextProcess
+end	
+
+
+begin fGetPtGOperator function 
+
+	set viTempPtGOperator to 1		
+	while viTempPtGOperator <= viINP_Operators and viPtGOperatorInUse(viTempPtGOperator) = 1 do 
+		inc viTempPtGOperator by 1
+	
+	if viTempPtGOperator > viINP_Operators
+		set viTempPtGOperator to 0
+	else 
+		set viPtGOperatorInUse(viTempPtGOperator) to 1
+
+	return viTempPtGOperator
+end 
+
+begin fGetADAPTOShuttle function 
+
+	set viTempShuttle to 1
+	
+	while viTempShuttle <= viINP_Shuttles and viShuttleInUse(viTempShuttle) = 1 do 
+		inc viTempShuttle by 1
+	
+	if viTempShuttle > viINP_Shuttles
+		set viTempShuttle to 0
+	else 
+		set viShuttleInUse(viTempShuttle) to 1
+
+	return viTempShuttle
+end 
+
+	
+
+
