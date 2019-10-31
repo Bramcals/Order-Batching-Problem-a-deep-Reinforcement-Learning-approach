@@ -1,0 +1,202 @@
+environment:
+    observation_space: 23
+    action_space: 31
+    reward_version: 2
+    reward_type: 7 
+    reward_cap: 1
+    penalty_incorrect_action: -0.005
+    penalty_action_30: 0
+    reward_correct_action: 0
+    penalty_late_orders: 0
+    max_number_order_too_late: 400
+    NOrders_hour: 400
+    max_state_repres_number: 25
+
+    #model change: reward type 2 and reward cap at 20
+
+main:
+    model: PPO2
+    policy:  CustomMlpPolicy
+    n_workers: 1
+    n_steps: 8000000
+    save_every: 10000
+    noramlize: true
+    logs:
+        - late_percentage
+        - total_actions_episode
+        - utilpickers 
+        - utilshuttles
+        - utildto
+        - utilsto
+        - utilpacking
+        - tot_numbers_orders_automod
+        - Nfaulty_actions_episode
+        - First_time_right_predictions
+        - Non_30actions_rate
+        - average_throughput1 
+        - average_throughput2 
+        - average_throughput3 
+        - average_throughput4 
+        - average_throughput5 
+        - average_throughput6 
+        - total_actions_episode
+        - Nstep 
+        - zactionepisode0
+        - zactionepisode1 
+        - zactionepisode2 
+        - zactionepisode3 
+        - zactionepisode4 
+        - zactionepisode5 
+        - zactionepisode6 
+        - zactionepisode7 
+        - zactionepisode8 
+        - zactionepisode9 
+        - zactionepisode10
+        - zactionepisode11
+        - zactionepisode12
+        - zactionepisode13
+        - zactionepisode14
+        - zactionepisode15
+        - zactionepisode16
+        - zactionepisode17
+        - zactionepisode18
+        - zactionepisode19
+        - zactionepisode20
+        - zactionepisode21
+        - zactionepisode22
+        - zactionepisode23
+        - zactionepisode24
+        - zactionepisode25
+        - zactionepisode26
+        - zactionepisode27
+        - zactionepisode28
+        - zactionepisode29
+        - zactionepisode30
+
+models:
+    PPO2:
+        gamma: 0.999      # Discount factor for future rewards
+        n_steps: 1024       # Batch size (n_steps * n_workers)
+        ent_coef: 0.01       # Entropy loss coefficient (higher values encourage more exploration)
+        learning_rate: 0.001 # LR
+        vf_coef: 0.5         # The contribution of value function loss to the total loss of the network
+        max_grad_norm: 0.5   # Max range of the gradient clipping 
+        lam: 0.95            # Generalized advantage estimation, for controlling variance/bias tradeoff
+        nminibatches: 4      # Number of minibatches for SGD/Adam updates
+        noptepochs: 4        # Number of iterations for SGD/Adam
+        cliprange: 0.2       # Clip factor for PPO (the action probability distribution of the updated policy cannot differ from the old one by this fraction [measured by KL divergence])
+        full_tensorboard_log: false
+        verbose: 0
+    DQN:
+        gamma: 0.9999 
+        learning_rate: 0.001
+        buffer_size: 200000
+        exploration_fraction: 0.999999 
+        exploration_final_eps: 0.01
+        train_freq: 1
+        batch_size: 256
+        learning_starts: 5000
+        target_network_update_freq: 500
+        prioritized_replay: false
+        prioritized_replay_alpha: 0.2
+        prioritized_replay_beta0: 0.4
+        prioritized_replay_beta_iters: None
+        prioritized_replay_eps: 0.000001
+        param_noise: False
+        verbose: 1
+        full_tensorboard_log: False
+        _init_setup_model: True
+    A2C: 
+        gamma: 0.99
+        learning_rate: 0.0007
+        n_steps: 5
+        vf_coef: 0.25 
+        ent_coef: 0.01 
+        max_grad_norm: 0.5
+        alpha: 0.99
+        epsilon: 0.0001
+        lr_schedule: constant
+        verbose: 0
+        full_tensorboard_log: False
+    ACER: 
+        gamma: 0.99
+        n_steps: 20
+        num_procs: 1
+        q_coef: 0.5
+        ent_coef: 0.01
+        max_grad_norm: 10
+        learning_rate: 0.0007
+        lr_schedule: linear
+        rprop_alpha: 0.99
+        rprop_epsilon: 0.0001
+        buffer_size: 5000
+        replay_ratio: 4
+        replay_start: 1000
+        correction_term: 10.0
+        trust_region: true
+        alpha: 0.99
+        delta: 1
+        verbose: 0
+    ACKTR:
+        gamma: 0.99 
+        nprocs: 1 
+        n_steps: 20
+        ent_coef: 0.01
+        vf_coef: 0.25
+        vf_fisher_coef: 1.0
+        learning_rate: 0.25
+        max_grad_norm: 0.5
+        kfac_clip: 0.001
+        lr_schedule: linear 
+        verbose: 0
+        async_eigen_decomp: False
+        full_tensorboard_log: False
+policies:
+    CustomMlpPolicy:
+        shared:
+        - 128
+        - 128
+        h_actor:
+        - 31 #
+        h_critic:
+        - 16
+    CustomDQNPolicy:
+        layers:
+        - 128
+        - 128
+    CustomLSTMPolicy:
+        n_lstm: 64
+        shared:
+        - 64
+        - 64
+        - lstm
+        h_actor: []
+        h_critic: []
+    CustomCnnPolicy:
+        filters:
+        - 8
+        - 8
+        - 8
+        kernel_size:
+        - 5
+        - 3
+        - 3
+        stride:
+        - 1
+        - 1
+        - 1
+        lstm: []
+        shared:
+        - 64
+        h_actor:
+        - 32
+        h_critic:
+        - 32
+        activ: relu
+        pd_init_scale: 0.05
+        conv_init_scale: 1.4
+        kernel_initializer: glorot_normal_initializer
+        init_bias: 0.5
+#     MlpPolicy: {}
+# policy: *id001
+# model: *id002
