@@ -4,10 +4,10 @@ environment:
     reward_version: 2
     reward_type: 7
     reward_cap: 1
-    penalty_incorrect_action: -0.01
+    penalty_incorrect_action: -0.005
     penalty_action_30: 0
     reward_correct_action: 0
-    penalty_late_orders: -0.09
+    penalty_late_orders: -0.0075
     max_number_order_too_late: 500
     NOrders_hour: 500
     max_state_repres_number: 25
@@ -71,7 +71,7 @@ main:
     - zactionepisode30
 models:
     PPO2:
-        gamma: 0.99
+        gamma: 0.9999
         n_steps: 1024
         ent_coef: 0.01
         learning_rate: 0.001
