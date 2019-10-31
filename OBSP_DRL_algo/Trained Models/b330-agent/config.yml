@@ -71,7 +71,7 @@ main:
     - zactionepisode30
 models:
     PPO2:
-        gamma: 0.99
+        gamma: 0.9999
         n_steps: 1024
         ent_coef: 0.01
         learning_rate: 0.001
